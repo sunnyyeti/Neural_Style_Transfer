@@ -64,8 +64,6 @@ parser.add_argument("--print_iter",type=int,default=0,
 parser.add_argument("--save_iter",type=int,default=0,
                     help="Save intermediate images every 'save_iter' iterations. Set to 0 to disable saving intermediate images. Default is 0.")
 args = parser.parse_args()
-if args.style_blend_weights!=None and len(args.style_blend_weights)!=len(args.sty_imgs):
-    raise ValueError("Length of style_blend_weights(%d) does not match the length of sty_imgs(%d)!"%(len(args.style_blend_weights),len(args.sty_imgs)))
 
 import torch 
 import torch.nn as nn
@@ -73,5 +71,41 @@ import torch.optim as optim
 import torchvision.models as models
 import torchvision.transforms as transforms
 from torch.autograd import Variable
+import warnings
 
- 
+class GramMatrix(nn.Module):
+    def forward(self, input):
+        a,b,c,d = input.size() #N,C,H,W
+        feats = input.view(a*b,c*d) 
+        gram = torch.mm(feats,feats.t())
+        return gram.div(a*b*c*d)
+
+
+class StyleNet(nn.Module):
+    def __init__(self,args):
+        self.style_imgs = args.sty_imgs
+        self.content_img = args.con_img
+        self.style_blend_weights = args.style_blend_weights
+        if self.style_blend_weights!=None and len(self.style_blend_weights)!=len(self.sty_imgs):
+            raise ValueError("Length of style_blend_weights(%d) does not match the length of sty_imgs(%d)!"%(len(self.style_blend_weights),len(self.sty_imgs)))
+        self.out_path = args.out
+        self.out_size = args.out_size
+        self.content_layers = args.content_layers
+        self.style_layers = args.style_layers
+        self.content_weight = args.content_weight
+        self.style_weight = args.style_weight
+        self.optim = args.optim
+        self.lr = args.learning_rate
+        self.num_iter = args.num_iter
+        self.pooling = args.pooling
+        self.init = args.init
+        self.print_iter = args.print_iter
+        self.save_iter = args.save_iter
+        if args.use_cuda:
+            if torch.cuda.is_available():
+                self.use_cuda = True
+            else:
+                raise ValueError("No valid CUDA device is found! You can remove the flag '--use_cuda' to run on CPU.")
+        else:
+            self.use_cuda = False
+        self.dtype = torch.cuda.FloatTensor if self.use_cuda else torch.FloatTensor
