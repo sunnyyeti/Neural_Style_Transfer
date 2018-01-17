@@ -42,8 +42,8 @@ parser.add_argument("--style_weight","-sw",type=float,default=1e3,
                     help="Weight of the reconstruction of the style. Default is 1000.0.")
 parser.add_argument("--optim",default="lbfgs",choices=['adam','lbfgs'],
                     help="Specify the optimization algorithm. Please choose from 'adam' and 'lbfgs'. Default is 'lbfgs'.")
-parser.add_argument("--learning_rate",'-lr',default=10.0,type=float,
-                    help="Learning rate for 'adam' optimization algorithm if '--optim' is specified as 'adam'. Otherwise, it is ignored. Default is 10.0.")
+parser.add_argument("--learning_rate",'-lr',default=1.0,type=float,
+                    help="Learning rate for 'adam' optimization algorithm if '--optim' is specified as 'adam'. Otherwise, it is ignored. Default is 1.0.")
 parser.add_argument("--num_iter",'-ni',default=300,type=int,
                     help="Number of the iterations. Default is 300.")
 parser.add_argument("--use_cuda",action="store_true",
@@ -52,12 +52,12 @@ parser.add_argument("--pooling","-p",default="max",choices=["max","ave"],
                     help="Type of pooling layer. Choose from 'max' and 'ave'. Default is 'max'.")
 parser.add_argument("--init",'-i',default="content",choices=["content","random"],
                     help="Way to initializa the generated image. Choose from 'content' and 'random'. 'content' initializes the image with content image. 'random' initializes the image with random noise. Default is 'content'.")
-parser.add_argument("--print_iter",type=int,default=50,
-                    help="Print progress every 'print_iter' iterations. Set to 0 to disable printing. Default is 50.")
+parser.add_argument("--print_iter",type=int,default=20,
+                    help="Print progress every 'print_iter' iterations. Set to 0 to disable printing. Default is 20.")
 parser.add_argument("--save_iter",type=int,default=0,
                     help="Save intermediate images every 'save_iter' iterations. Set to 0 to disable saving intermediate images. Default is 0.")
 args = parser.parse_args()
-
+print(args)
 import torch 
 import torch.nn as nn
 import torch.optim as optim
@@ -77,16 +77,21 @@ class GramMatrix(nn.Module):
 
 class StyleNet(nn.Module):
     def __init__(self,args):
+        super(StyleNet,self).__init__()
         self.style_img_names = args.sty_imgs
         self.content_img_name = args.con_img
         self.style_blend_weights = args.style_blend_weights
-        if self.style_blend_weights!=None and len(self.style_blend_weights)!=len(self.sty_imgs):
-            raise ValueError("Length of style_blend_weights(%d) does not match the length of sty_imgs(%d)!"%(len(self.style_blend_weights),len(self.sty_imgs)))
+        if self.style_blend_weights!=None and len(self.style_blend_weights)!=len(self.style_img_names):
+            raise ValueError("Length of style_blend_weights(%d) does not match the length of sty_imgs(%d)!"%(len(self.style_blend_weights),len(self.style_img_names)))
         self.out_path = args.out
-        self.out_size = args.out_size
+        self.out_size = args.out_size 
+        if self.out_size!=None and len(self.out_size)==1:
+            self.out_size = self.out_size[0]
         self.content_layers = args.content_layers
         self.style_layers = args.style_layers
         self._layers_validation()
+        self.MAX_C = self._get_max_layer(self.content_layers)
+        self.MAX_S = self._get_max_layer(self.style_layers)
         self.content_weight = args.content_weight
         self.style_weight = args.style_weight
         self.optim = args.optim
@@ -104,19 +109,19 @@ class StyleNet(nn.Module):
         else:
             self.use_cuda = False
         self.dtype = torch.cuda.FloatTensor if self.use_cuda else torch.FloatTensor
-        self.loss = nn.MSELoss()
+        self.loss = nn.MSELoss().cuda() if self.use_cuda else nn.MSELoss()
         self.loss_net = self._load_vgg19()
         self.content_img = self._load_cont_img()
-        self.style_imgs = self.load_sty_imgs()
+        self.style_imgs = self._load_sty_imgs()
         if self.init=="content":
-            self.gen_img = nn.parameter(self.content_img.data.clone())
+            self.gen_img = nn.Parameter(self.content_img.data.clone().type(self.dtype))
         if self.init=='random':
-            self.gen_img = nn.parameter(torch.randn(self.content_img.size()).type(self.dtype))
+            self.gen_img = nn.Parameter(torch.randn(self.content_img.size()).type(self.dtype))
         self.gram = self._load_gram()    
         if self.optim=='adam':
             self.optimizer = optim.Adam([self.gen_img],lr=self.lr)
         if self.optim=='lbfgs':
-            self.optimizer = optim.LBFGS([self.gen_img])
+            self.optimizer = optim.LBFGS([self.gen_img],lr=self.lr)
             
     def _closure(self):
         def _replace(layer):
@@ -129,18 +134,24 @@ class StyleNet(nn.Module):
                 tmp = tmp.cuda()
             return tmp
         self.optimizer.zero_grad()
+        self.gen_img.data.clamp_(0,1)
         gen_img = self.gen_img.clone()
-        gen_img.data.clamp_(0,1)
         content_img = self.content_img.clone()
         style_imgs = [img.clone() for img in self.style_imgs]
+       
         content_loss = 0
         style_loss = 0
         index = 1
-        for layer in list(self.loss_net.features):
+        for layer in list(self.loss_net):
             layer = _replace(layer)
-            gen_img = layer(gen_img)
-            content_img = layer(content_img)
-            style_imgs = [layer(img) for img in style_imgs]
+            if index<=self.MAX_C or index<=self.MAX_S:
+                gen_img = layer(gen_img)
+                if index<=self.MAX_C:
+                    content_img = layer(content_img)
+                if index<=self.MAX_S:
+                    style_imgs = [layer(img) for img in style_imgs]
+            else:
+                break
             layer_name = "invalid_layer"
             if isinstance(layer,nn.Conv2d):
                 layer_name = "conv_"+str(index)
@@ -163,6 +174,7 @@ class StyleNet(nn.Module):
                     for i in xrange(length):
                         style_loss += style_losses[i]*1.0/length
         total_loss = content_loss + style_loss
+        
         self.t_loss,self.c_loss,self.s_loss = total_loss,content_loss,style_loss
         total_loss.backward()
         if self.optim=="adam":
@@ -178,6 +190,7 @@ class StyleNet(nn.Module):
             
     def run(self):
         for i in range(self.num_iter):
+
             self.train()
             if self.print_iter!=0 and (i+1)%self.print_iter==0:
                 print("run {}:".format(i+1))
@@ -192,7 +205,7 @@ class StyleNet(nn.Module):
         self._save_image(self.out_path)
         
     def _save_image(self,filename):
-        image = self.gen_img.data.cpu()
+        image = self.gen_img.data.cpu().clamp_(0,1)
         image = image.squeeze(0)
         image = transforms.ToPILImage()(image)
         image.save(filename)
@@ -206,7 +219,7 @@ class StyleNet(nn.Module):
     def _load_cont_img(self):
         img = Image.open(self.content_img_name)
         if self.out_size!=None:
-            img = transforms.resize(self.out_size)(img)
+            img = transforms.Resize(self.out_size)(img)
         img = transforms.ToTensor()(img)
         img = Variable(img)
         img = img.unsqueeze(0)
@@ -215,13 +228,16 @@ class StyleNet(nn.Module):
     def _load_sty_imgs(self):
         sty_imgs = []
         for sty_img_name in self.style_img_names:
-            img = Image.open(sty_img_name):
+            img = Image.open(sty_img_name)
             img = transforms.ToTensor()(img)
             img = Variable(img)
             img = img.unsqueeze(0)
             sty_imgs.append(img.type(self.dtype))
         return sty_imgs
-        
+
+    def _get_max_layer(self,layers):
+        return max([int(l.split("_")[-1]) for l in layers])
+
     def _layers_validation(self):
         """
         Check the validity of the content layers and style layers specified by user. 
@@ -235,7 +251,7 @@ class StyleNet(nn.Module):
         """
         Load the pretrained vgg19 model and freeze the parameters so that the gradients are not computed.
         """
-        model = models.vgg19(pretrained=True)
+        model = models.vgg19(pretrained=True).features
         if self.use_cuda:
             model = model.cuda()
         return model
