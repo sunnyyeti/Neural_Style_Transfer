@@ -1,21 +1,4 @@
-# --style image: a list 
-# --style_merge_weight 
-# --content image 
-# --output_size: default:same as input;int;tuple of int 
-# --output_image:file path 
-# --optim: Amda; LBFGS 
-# --num_iter:int 
-# --learning_rate:learning rate for Adam 
-# --use_cuda:whether to use GPU 
-# --content_layers 
-# --style_layes 
-# --content weight 
-# --style weight 
-# --pooling: max; ave 
-# --init_img: from content; random 
-# --print_iter: how often to print message 
-# --save_iter:how often to save intermediate 
-
+from __future__ import print_function
 import argparse
 
 def required_length(nmin,nmax):
@@ -59,24 +42,24 @@ parser.add_argument("--pooling","-p",default="max",choices=["max","ave"],
                     help="Type of pooling layer. Choose from 'max' and 'ave'. Default is 'max'.")
 parser.add_argument("--init",'-i',default="content",choices=["content","random"],
                     help="Way to initializa the generated image. Choose from 'content' and 'random'. 'content' initializes the image with content image. 'random' initializes the image with random noise. Default is 'content'.")
-parser.add_argument("--print_iter",type=int,default=0,
-                    help="Print progress every 'print_iter' iterations. Set to 0 to disable printing. Default is 0.")
+parser.add_argument("--print_iter",type=int,default=50,
+                    help="Print progress every 'print_iter' iterations. Set to 0 to disable printing. Default is 50.")
 parser.add_argument("--save_iter",type=int,default=0,
                     help="Save intermediate images every 'save_iter' iterations. Set to 0 to disable saving intermediate images. Default is 0.")
 args = parser.parse_args()
-print args
+
 import torch 
 import torch.nn as nn
 import torch.optim as optim
 import torchvision.models as models
 import torchvision.transforms as transforms
 from torch.autograd import Variable
-import re
+import re,os
 from PIL import Image
 
 class GramMatrix(nn.Module):
     def forward(self, input):
-        a,b,c,d = input.size() #N,C,H,W
+        a,b,c,d = input.size() #N,C,H,W N=1
         feats = input.view(a*b,c*d) 
         gram = torch.mm(feats,feats.t())
         return gram.div(a*b*c*d)
@@ -125,7 +108,16 @@ class StyleNet(nn.Module):
         if self.optim=='lbfgs':
             self.optimizer = optim.LBFGS([self.gen_img])
             
-    def closure(self):
+    def _closure(self):
+        def _replace(layer):
+            tmp = layer
+            if isinstance(layer,nn.ReLU):
+                tmp = nn.ReLU(inplace=False)
+            if isinstance(layer,nn.MaxPool2d) and self.pooling=="ave":
+                tmp = nn.AvgPool2d(kernel_size=2,stride=2)
+            if self.use_cuda:
+                tmp = tmp.cuda()
+            return tmp
         self.optimizer.zero_grad()
         gen_img = self.gen_img.clone()
         gen_img.data.clamp_(0,1)
@@ -133,10 +125,67 @@ class StyleNet(nn.Module):
         style_imgs = [img.clone() for img in self.style_imgs]
         content_loss = 0
         style_loss = 0
-        
-        
+        index = 1
+        for layer in list(self.loss_net.features):
+            layer = _replace(layer)
+            gen_img = layer(gen_img)
+            content_img = layer(content_img)
+            style_imgs = [layer(img) for img in style_imgs]
+            layer_name = "invalid_layer"
+            if isinstance(layer,nn.Conv2d):
+                layer_name = "conv_"+str(index)
+            if isinstance(layer,nn.ReLU):
+                layer_name = "relu_"+str(index)
+                index += 1
+            if layer_name in self.content_layers:
+                content_loss += self.loss(gen_img*self.content_weight,content_img.detach()*self.content_weight)
+            if layer_name in self.style_layers:
+                gen_img_gram = self.gram(gen_img)
+                style_imgs_grams = [self.gram(img) for img in style_imgs]
+                style_losses = [self.loss(gen_img_gram*self.style_weight,sty_gram.detach()*self.style_weight) for sty_gram in style_imgs_grams]
+                if self.style_blend_weights!=None:
+                    assert len(style_losses)==len(self.style_blend_weights)
+                    total = sum(self.style_blend_weights)
+                    for i in xrange(len(style_losses)):
+                        style_loss += self.style_blend_weights[i]*style_losses[i]/total
+                else:
+                    length = len(style_losses)
+                    for i in xrange(length):
+                        style_loss += style_losses[i]*1.0/length
+        total_loss = content_loss + style_loss
+        self.t_loss,self.c_loss,self.s_loss = total_loss,content_loss,style_loss
+        total_loss.backward()
+        if self.optim=="adam":
+            self.optimizer.step()
+        else:
+            return total_loss
+                      
     def train(self):
-        pass
+        if self.optim=="adam":
+            self._closure()
+        else:
+            self.optimizer.step(self._closure)
+            
+    def run(self):
+        for i in range(self.num_iter):
+            self.train()
+            if self.print_iter!=0 and (i+1)%self.print_iter==0:
+                print("run {}:".format(i+1))
+                print('Style Loss: {:4f} Content Loss: {:4f} Total_Loss: {:4f}'.format(
+                    self.s_loss.data[0], self.c_loss.data[0], self.t_loss.data[0])) 
+                print() 
+            if self.save_iter!=0 and (i+1)%self.save_iter==0:
+                out_folder = self.out_path.split(os.path.sep)[:-1]
+                out_folder += ["temp_img_iter_%s.jpg"%(cu_iter)]
+                filename = os.path.join(out_folder)
+                self._save_image(filename)
+        self._save_image(self.out_path)
+        
+    def _save_image(self,filename):
+        image = self.gen_img.data.cpu()
+        image = image.squeeze(0)
+        image = transforms.ToPILImage()(image)
+        image.save(filename)
         
     def _load_gram(self):
         gram = GramMatrix()
@@ -150,7 +199,7 @@ class StyleNet(nn.Module):
             img = transforms.resize(self.out_size)(img)
         img = transforms.ToTensor()(img)
         img = Variable(img)
-        img.unsqueeze(0)
+        img = img.unsqueeze(0)
         return img.type(self.dtype)
         
     def _load_sty_imgs(self):
@@ -159,7 +208,7 @@ class StyleNet(nn.Module):
             img = Image.open(sty_img_name):
             img = transforms.ToTensor()(img)
             img = Variable(img)
-            img.unsqueeze(0)
+            img = img.unsqueeze(0)
             sty_imgs.append(img.type(self.dtype))
         return sty_imgs
         
@@ -177,9 +226,11 @@ class StyleNet(nn.Module):
         Load the pretrained vgg19 model and freeze the parameters so that the gradients are not computed.
         """
         model = models.vgg19(pretrained=True)
-        for par in model.parameters():
-            par.requires_grad=False
         if self.use_cuda:
             model = model.cuda()
         return model
+        
+if __name__ == "__main__":
+    style_net = StyleNet(args)
+    style_net.run()
                 
