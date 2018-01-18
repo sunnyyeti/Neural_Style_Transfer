@@ -21,7 +21,19 @@ We can also apply more than one style to the same content at the same time and t
   </tr>
   <tr>
     <td><img src="./content/tubingen.jpg" width="200" height="150"></td>
-    <td colspan="2"><img src="./output/tubingen37.jpg" width="400" height="150"></td>
+    <td colspan="2"><img src="./output/tubingen37.jpg" width="450" height="150"></td>
   </tr>
 </table>
+
+## Dependencies:
+* Pytorch
+* __Optional__:
+    1. CUDA 
+    2. cuDnn
+
+## Usage:
+Basic usage:
+```
+python NeuralStyle --sty_imgs <image.jpg> <image.jpg>... --con_img <image.jpg> --out <image.jpg>
+```
 
