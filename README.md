@@ -9,7 +9,7 @@ With this algorithm, we can apply different styles from different images to the 
 
 ||<img src="./style/1.jpg" width="150" height="80">|<img src="./style/2.jpg" width="150" height="80">|<img src="./style/3.jpg" width="150" height="80">|<img src="./style/4.jpg" width="150" height="80">|
 |---|---|---|---|---|
-|![](./content/tubingen.jpg)|![](./output/tubingen_1.jpg)|![](./output/tubingen_2.jpg)|![](./output/tubingen_3.jpg)|![](./output/tubingen_4.jpg)|
+|<img src="./content/tubingen.jpg" width="150" height="80">|<img src="./output/tubingen_1.jpg" width="150" height="80">|<img src="./output/tubingen_2.jpg" width="150" height="80">|<img src="./output/tubingen_3.jpg" width="150" height="80">|<img src="./output/tubingen_4.jpg" width="150" height="80">|
 
 fdf
 
