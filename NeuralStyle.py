@@ -25,7 +25,7 @@ parser = argparse.ArgumentParser(description="Generate an image with content as 
 parser.add_argument("--sty_imgs","-s",nargs="+",required=True, 
                     help="File path(es) to the style image(s). If there are more than one style image, please separate them by space.")
 parser.add_argument("--style_blend_weights",'-sbw',nargs='+',type=float,
-                    help="Weights of different style to blend. This should have the same length as option '--sty_img/-s'. Please separate weights by space. Equal weights are assigned to different if leave it default.")
+                    help="Weights of different style to blend. This should have the same length as option '--sty_img/-s'. Please separate weights by space. Equal weights are assigned to different styles if it is left default.")
 parser.add_argument("--con_img","-c",required=True,
                     help="File path to the content image.")
 parser.add_argument("--out","-o",required=True,
@@ -37,7 +37,7 @@ parser.add_argument("--content_layers",'-cls',nargs="+",default=["relu_4"],
 parser.add_argument("--style_layers",'-sls',nargs="+",default=['relu_1', 'relu_2', 'relu_3', 'relu_4', 'relu_5'],
                     help="Layers used to reconstruct style. Please only use 'relu' and 'conv' in format 'relu_i' and 'conv_i' with 1<=i<=16. If there are more than one layer, specify them by space. Default is ['relu_1', 'relu_2', 'relu_3', 'relu_4', 'relu_5'].")
 parser.add_argument("--content_weight","-cw",type=float,default=0.5,
-                    help="Weight of the reconstruction of the content. Default is 0.5")
+                    help="Weight of the reconstruction of the content. Default is 0.5.")
 parser.add_argument("--style_weight","-sw",type=float,default=5e3,
                     help="Weight of the reconstruction of the style. Default is 5000.0.")
 parser.add_argument("--optim",default="lbfgs",choices=['adam','lbfgs'],
@@ -53,7 +53,7 @@ parser.add_argument("--pooling","-p",default="ave",choices=["max","ave"],
 parser.add_argument("--init",'-i',default="random",choices=["content","random"],
                     help="Way to initializa the generated image. Choose from 'content' and 'random'. 'content' initializes the image with content image. 'random' initializes the image with random noise. Default is 'random'.")
 parser.add_argument("--print_iter",'-pi',type=int,default=1,
-                    help="Print progress every 'print_iter' iterations. Set to 0 to disable printing. Default is 20.")
+                    help="Print progress every 'print_iter' iterations. Set to 0 to disable printing. Default is 1.")
 parser.add_argument("--save_iter",'-si',type=int,default=0,
                     help="Save intermediate images every 'save_iter' iterations. Set to 0 to disable saving intermediate images. Default is 0.")
 args = parser.parse_args()
