@@ -27,13 +27,16 @@ We can also apply more than one style to the same content at the same time and t
 
 ## Dependencies:
 * Pytorch
-* __Optional__:
+* Optional:
     1. CUDA 
     2. cuDnn
 
 ## Usage:
-Basic usage:
+**Basic usage**:
 ```
-python NeuralStyle --sty_imgs <image.jpg> <image.jpg>... --con_img <image.jpg> --out <image.jpg>
+python NeuralStyle.py --sty_imgs <image.jpg> <image.jpg>... --con_img <image.jpg> --out <image.jpg>
 ```
+You can type `python NeuralStyle.py -h` for help info.
 
+**Options**:
+* `--sty_imgs/-s`:File path(es) to the style image(s). If there are more than one style image, please separate them by space.
