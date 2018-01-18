@@ -32,29 +32,29 @@ parser.add_argument("--out","-o",required=True,
                     help="File path to the output image.")
 parser.add_argument("--out_size",'-os',nargs="+",action=required_length(1,2),type=int,
                     help="Size of the output image. By default, the output image has the same size as content image. You can specify the height and width by separating them with space like 'h w'. If you only specify an Int, then the size of the output is determined by matching the smaller edge of the content image to this number while keeping the ratio.")
-parser.add_argument("--content_layers",'-cls',nargs="+",default=["conv_4"],
-                    help="Layers used to reconstruct content. Please only use 'relu' and 'conv' in format 'relu_i' and 'conv_i' with 1<=i<=16. If there are more than one layer, specify them by space. Default is ['conv_4'].")
-parser.add_argument("--style_layers",'-sls',nargs="+",default=['conv_1', 'conv_2', 'conv_3', 'conv_4', 'conv_5'],
-                    help="Layers used to reconstruct style. Please only use 'relu' and 'conv' in format 'relu_i' and 'conv_i' with 1<=i<=16. If there are more than one layer, specify them by space. Default is ['conv_1', 'conv_2', 'conv_3', 'conv_4', 'conv_5'].")
-parser.add_argument("--content_weight","-cw",type=float,default=1.0,
-                    help="Weight of the reconstruction of the content. Default is 1.0")
-parser.add_argument("--style_weight","-sw",type=float,default=1e3,
-                    help="Weight of the reconstruction of the style. Default is 1000.0.")
+parser.add_argument("--content_layers",'-cls',nargs="+",default=["relu_4"],
+                    help="Layers used to reconstruct content. Please only use 'relu' and 'conv' in format 'relu_i' and 'conv_i' with 1<=i<=16. If there are more than one layer, specify them by space. Default is ['relu_4'].")
+parser.add_argument("--style_layers",'-sls',nargs="+",default=['relu_1', 'relu_2', 'relu_3', 'relu_4', 'relu_5'],
+                    help="Layers used to reconstruct style. Please only use 'relu' and 'conv' in format 'relu_i' and 'conv_i' with 1<=i<=16. If there are more than one layer, specify them by space. Default is ['relu_1', 'relu_2', 'relu_3', 'relu_4', 'relu_5'].")
+parser.add_argument("--content_weight","-cw",type=float,default=0.5,
+                    help="Weight of the reconstruction of the content. Default is 0.5")
+parser.add_argument("--style_weight","-sw",type=float,default=5e3,
+                    help="Weight of the reconstruction of the style. Default is 5000.0.")
 parser.add_argument("--optim",default="lbfgs",choices=['adam','lbfgs'],
                     help="Specify the optimization algorithm. Please choose from 'adam' and 'lbfgs'. Default is 'lbfgs'.")
-parser.add_argument("--learning_rate",'-lr',default=1.0,type=float,
-                    help="Learning rate for 'adam' optimization algorithm if '--optim' is specified as 'adam'. Otherwise, it is ignored. Default is 1.0.")
-parser.add_argument("--num_iter",'-ni',default=300,type=int,
-                    help="Number of the iterations. Default is 300.")
-parser.add_argument("--use_cuda",action="store_true",
+parser.add_argument("--learning_rate",'-lr',default=0.7,type=float,
+                    help="Learning rate for optimization algorithm. Default is 0.7.")
+parser.add_argument("--num_iter",'-ni',default=20,type=int,
+                    help="Number of the iterations. Default is 20.")
+parser.add_argument("--use_cuda","-uc",action="store_true",
                     help="Switch to use CUDA to accelerate computing on GPU.")
-parser.add_argument("--pooling","-p",default="max",choices=["max","ave"],
-                    help="Type of pooling layer. Choose from 'max' and 'ave'. Default is 'max'.")
-parser.add_argument("--init",'-i',default="content",choices=["content","random"],
-                    help="Way to initializa the generated image. Choose from 'content' and 'random'. 'content' initializes the image with content image. 'random' initializes the image with random noise. Default is 'content'.")
-parser.add_argument("--print_iter",type=int,default=20,
+parser.add_argument("--pooling","-p",default="ave",choices=["max","ave"],
+                    help="Type of pooling layer. Choose from 'max' and 'ave'. Default is 'ave'.")
+parser.add_argument("--init",'-i',default="random",choices=["content","random"],
+                    help="Way to initializa the generated image. Choose from 'content' and 'random'. 'content' initializes the image with content image. 'random' initializes the image with random noise. Default is 'random'.")
+parser.add_argument("--print_iter",'-pi',type=int,default=1,
                     help="Print progress every 'print_iter' iterations. Set to 0 to disable printing. Default is 20.")
-parser.add_argument("--save_iter",type=int,default=0,
+parser.add_argument("--save_iter",'-si',type=int,default=0,
                     help="Save intermediate images every 'save_iter' iterations. Set to 0 to disable saving intermediate images. Default is 0.")
 args = parser.parse_args()
 print(args)
@@ -163,7 +163,7 @@ class StyleNet(nn.Module):
             if layer_name in self.style_layers:
                 gen_img_gram = self.gram(gen_img)
                 style_imgs_grams = [self.gram(img) for img in style_imgs]
-                style_losses = [self.loss(gen_img_gram*self.style_weight,sty_gram.detach()*self.style_weight) for sty_gram in style_imgs_grams]
+                style_losses = [self.loss(gen_img_gram*self.style_weight,sty_gram.detach()*self.style_weight)/len(self.style_layers) for sty_gram in style_imgs_grams]
                 if self.style_blend_weights!=None:
                     assert len(style_losses)==len(self.style_blend_weights)
                     total = sum(self.style_blend_weights)
@@ -199,8 +199,8 @@ class StyleNet(nn.Module):
                 print() 
             if self.save_iter!=0 and (i+1)%self.save_iter==0:
                 out_folder = self.out_path.split(os.path.sep)[:-1]
-                out_folder += ["temp_img_iter_%s.jpg"%(cu_iter)]
-                filename = os.path.join(out_folder)
+                out_folder += ["temp_img_iter_%s.jpg"%(i+1)]
+                filename = os.path.join(*out_folder)
                 self._save_image(filename)
         self._save_image(self.out_path)
         
@@ -220,6 +220,7 @@ class StyleNet(nn.Module):
         img = Image.open(self.content_img_name)
         if self.out_size!=None:
             img = transforms.Resize(self.out_size)(img)
+        self._content_image_size = (img.size[1],img.size[0])## h,w of content image
         img = transforms.ToTensor()(img)
         img = Variable(img)
         img = img.unsqueeze(0)
@@ -229,9 +230,11 @@ class StyleNet(nn.Module):
         sty_imgs = []
         for sty_img_name in self.style_img_names:
             img = Image.open(sty_img_name)
+            img = transforms.Resize(self._content_image_size)(img)
             img = transforms.ToTensor()(img)
             img = Variable(img)
             img = img.unsqueeze(0)
+            assert img.size() ==  self.content_img.size()
             sty_imgs.append(img.type(self.dtype))
         return sty_imgs
 
@@ -248,9 +251,6 @@ class StyleNet(nn.Module):
                 raise ValueError("Invalid layer '%s' specified in vgg19. Please use format 'relu_i' or 'conv_i' where 1<=i<=16 for '--content_layers\-cls' and '--style_layers\-sls'."%layer)
     
     def _load_vgg19(self):
-        """
-        Load the pretrained vgg19 model and freeze the parameters so that the gradients are not computed.
-        """
         model = models.vgg19(pretrained=True).features
         if self.use_cuda:
             model = model.cuda()

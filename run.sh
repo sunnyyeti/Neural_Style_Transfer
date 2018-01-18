@@ -1,1 +1,1 @@
-python NeuralStyle.py --sty_imgs style/dream.jpg style/fangao1.jpg -sbw 2 8 -cls conv_5  --con_img content/3.jpg --out output/train_merge.jpg  --print_iter 1 --use_cuda -ni 20 -sw 2000 -os 512
+python NeuralStyle.py --sty_imgs style/1.jpg style/dream.jpg -sbw 7 3 --con_img content/tubingen.jpg --out output/tubingen73.jpg  -pi 1 --use_cuda -ni 20 -lr 0.7 -sw 5000 -cw 0.5  
