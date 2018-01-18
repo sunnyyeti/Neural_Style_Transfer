@@ -11,7 +11,7 @@ With this algorithm, we can apply different styles from different images to the 
 |---|---|---|---|---|
 |<img src="./content/tubingen.jpg" width="200" height="150">|<img src="./output/tubingen_1.jpg" width="200" height="150">|<img src="./output/tubingen_2.jpg" width="200" height="150">|<img src="./output/tubingen_3.jpg" width="200" height="150">|<img src="./output/tubingen_4.jpg" width="200" height="150">|
 
-We can also apply more than one style to the same content at the same time and the weights of different style can adjusted. Below is an example I apply two styles with weight ration 3:7 to the Tubingen image.
+We can also apply more than one style to the same content at the same time and the weights of different styles can be adjusted. Below is an example I apply two styles with weight ration 3:7 to the Tubingen image.
 
 <table>
   <tr>
