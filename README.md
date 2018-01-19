@@ -54,5 +54,5 @@ You can type `python NeuralStyle.py -h` for help info.
 * `--use_cuda/-uc`: Switch to use CUDA to accelerate computing on GPU.
 * `--pooling/-p`: Type of pooling layer. Choose from 'max' and 'ave'. Default is 'ave'.
 * `--init/-i`: Way to initializa the generated image. Choose from 'content' and 'random'. 'content' initializes the image with content image. 'random' initializes the image with random noise. Default is 'random'.
-* `--print_iter/-p`: Print progress every 'print_iter' iterations. Set to 0 to disable printing. Default is 1.
+* `--print_iter/-pi`: Print progress every 'print_iter' iterations. Set to 0 to disable printing. Default is 1.
 * `--save_iter/-si`: Save intermediate images every 'save_iter' iterations. Set to 0 to disable saving intermediate images. Default is 0.
